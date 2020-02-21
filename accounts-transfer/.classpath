@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<classpath>
+	<classpathentry kind="con" path="org.mule.tooling.MULE_PROJECT_LIB"/>
+	<classpathentry kind="con" path="MULE_LIB/org.mule.connectors/mule-file-connector/1.3.2"/>
+	<classpathentry kind="con" path="MULE_LIB/org.mule.modules/mule-apikit-module/1.3.7"/>
+	<classpathentry kind="con" path="MULE_LIB/org.mule.connectors/mule-http-connector/1.5.11"/>
+	<classpathentry kind="con" path="MULE_LIB/org.mule.modules/mule-validation-module/1.4.0"/>
+	<classpathentry kind="con" path="MULE_LIB/org.mule.connectors/mule-db-connector/1.5.5"/>
+	<classpathentry kind="con" path="MULE_LIB/org.mule.connectors/mule-jms-connector/1.6.3"/>
+	<classpathentry kind="con" path="MULE_LIB/org.mule.connectors/mule-sockets-connector/1.1.5"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/org.checkerframework/checker-qual/2.8.1"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/com.fasterxml.jackson.core/jackson-annotations/2.9.10"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/com.google.code.findbugs/jsr305/3.0.2"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/org.slf4j/slf4j-api/1.7.25"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/com.google.guava/listenablefuture/9999.0-empty-to-avoid-conflict-with-guava"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/com.google.j2objc/j2objc-annotations/1.3"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/org.fusesource.hawtbuf/hawtbuf/1.11"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/com.fasterxml.jackson.core/jackson-core/2.9.10"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/com.google.errorprone/error_prone_annotations/2.3.2"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/com.fasterxml.jackson.core/jackson-databind/2.9.10.1"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/org.apache.activemq/activemq-broker/5.15.11"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/com.google.guava/guava/28.0-jre"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/org.codehaus.mojo/animal-sniffer-annotations/1.17"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/org.apache.geronimo.specs/geronimo-jms_1.1_spec/1.1.1"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/com.google.guava/failureaccess/1.0.1"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/org.apache.geronimo.specs/geronimo-j2ee-management_1.1_spec/1.0.1"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/org.apache.activemq/activemq-client/5.15.11"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/org.apache.activemq/activemq-openwire-legacy/5.15.11"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/com.google.protobuf/protobuf-java/3.6.1"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/mysql/mysql-connector-java/8.0.19"/>
+	<classpathentry kind="con" path="org.mule.tooling.API_SPEC_LIB/77194e76-fef0-451d-8d8c-372d4eed33cc/accounttransfer/1.0.4"/>
+	<classpathentry kind="con" path="org.eclipse.jdt.launching.JRE_CONTAINER"/>
+	<classpathentry exported="true" kind="con" path="MULE_RUNTIME/org.mule.tooling.server.4.2.2.ee"/>
+	<classpathentry kind="src" path="src/main/mule"/>
+	<classpathentry kind="src" path="src/main/java"/>
+	<classpathentry kind="src" path="src/main/resources"/>
+	<classpathentry kind="src" output="target/test-classes" path="src/test/java"/>
+	<classpathentry kind="src" output="target/test-classes" path="src/test/resources"/>
+	<classpathentry kind="src" path="src/test/munit"/>
+	<classpathentry kind="output" path="target/classes"/>
+</classpath>
