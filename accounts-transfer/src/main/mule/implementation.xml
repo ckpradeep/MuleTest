@@ -1,0 +1,343 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file" xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+	xmlns:validation="http://www.mulesoft.org/schema/mule/validation"
+	xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core" xmlns:db="http://www.mulesoft.org/schema/mule/db" xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/validation http://www.mulesoft.org/schema/mule/validation/current/mule-validation.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+	<flow name="postTransfer" doc:id="74cf3cf9-19ae-469f-affe-221fa9600d68" >
+		<set-variable value="#[message.payload]" doc:name="requestpayload" doc:id="c900a53c-79c1-49d5-a29e-ea3bb31f36f4" variableName="reqpayload" />
+		<db:select doc:name="Fetch Source Account Details" doc:id="f8527098-e8cc-4d90-82d0-041d433b3f24" config-ref="Database_Config">
+			
+			<db:sql>select 
+ad.AccountId, 
+ad.AccountType, 
+ad.Status, 
+ad.AccountDescriptorId, 
+a.AccountMasterId,
+ CASE 
+	when da.AvailableBalance is not null then da.AvailableBalance
+    when ia.CurrentValue is not null then ia.CurrentValue
+    when la.PrincipalBalance is not null then la.PrincipalBalance 
+	when loa.PrincipalBalance is not null then loa.PrincipalBalance
+ END as Balance
+FROM  accountdescriptor ad
+inner join account a 
+on ad.AccountDescriptorId = a.AccDescriptorId 
+left join depositaccount da
+on a.AccountMasterId = da.RefAccountId
+left join investmentaccount ia
+on a.AccountMasterId = ia.RefIAccountId
+left join loanaccount la
+on a.AccountMasterId = la.AccountId
+left join locaccount loa
+on a.AccountMasterId = loa.AccountId
+Where
+ad.AccountId = :AccountId;
+</db:sql>
+			<db:input-parameters><![CDATA[#[{
+	'AccountId': vars.reqpayload.FromAccountId
+}]]]></db:input-parameters>
+		</db:select>
+		<ee:transform doc:name="Store Source Account Details" doc:id="06044624-84ac-4c56-a34a-f6fb29759455">
+			<ee:message>
+			</ee:message>
+			<ee:variables>
+				<ee:set-variable variableName="checkaccountstatus"><![CDATA[%dw 2.0
+output application/json
+
+fun getBalance(accountBalance: Number, requestAmount: Number) =
+	if(accountBalance > requestAmount)
+ 		1
+ 	else
+ 		0
+
+fun getStatus(accountStatus: String) =
+	if(accountStatus contains('OPEN') )
+ 		1
+ 	else
+ 		0 
+---
+{
+	accounttype: payload.AccountType,
+	accountstatus: payload.Status,
+	accountbalance: payload.Balance,
+	requestedamount: vars.reqpayload.Amount as Number,
+	status: getStatus(payload.Status[0]) as Number,
+	balancestatus: getBalance(payload.Balance[0], vars.reqpayload.Amount as Number)
+}		
+	]]></ee:set-variable>
+			</ee:variables>
+		</ee:transform>
+		<validation:is-true doc:name="Is Savings Account?" doc:id="42eb1b05-963d-46a7-aa15-bf4d11937c2b" expression="#[['SAVINGS'] contains vars.checkaccountstatus.accounttype[0]]" message="#['Not a savings account' ++ ' ' ++ (vars.checkaccountstatus.accounttype[0] default ' ') as String]"/>
+		<flow-ref doc:name="Fetch Recepient Account Details" doc:id="6239fa7e-9dde-4927-97fb-4b96e4d0b8e2" name="fetchaccountinfo" target="ToAccountId"/>
+		<flow-ref doc:name="Choice Router Subflow" doc:id="f7fa3c0d-a2ee-42cb-a6b4-e13099809089" name="prechecksuccess" />
+		<jms:publish doc:name="JMS transferQ" doc:id="e3495b57-ac3b-415b-a0b4-260a05bcf60d" config-ref="JMS_Config" destination="accountsQ">
+			<jms:message >
+				<jms:body ><![CDATA[#[output application/json --- payload]]]></jms:body>
+				<jms:properties ><![CDATA[#[{"publisher":"training"}]]]></jms:properties>
+			</jms:message>
+		</jms:publish>
+		<error-handler >
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="0592838e-318b-4dfe-8396-7f0fe30a87db" type="DB:BAD_SQL_SYNTAX">
+				<ee:transform doc:name="Transform Message" doc:id="ac16d01b-dd67-4e4d-a089-2a71f415f8d4">
+					<ee:message>
+						<ee:set-payload><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "Bad SQL syntax: " ++ error.description as String
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<set-variable value="500" doc:name="httpstatus" doc:id="c3e62c60-5b73-4ab9-b375-cc0520b46ba4" variableName="httpstatus" />
+				<logger level="INFO" doc:name="Logger" doc:id="c4ddd691-d5bb-485e-b6b1-8563f7d680e4" />
+			</on-error-continue>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="b7bdbdb9-91aa-4f48-89a3-37581acc4866" type="EXPRESSION">
+				<ee:transform doc:name="Transform Message" doc:id="69399456-4d50-46f7-83e3-d78a9221845a" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": error.description
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="ce9b8a8f-2243-4b4d-aeb0-ecf10f50f7c2" />
+			</on-error-continue>
+			<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="2adcd3ca-96f7-481c-be5b-603bc75e54d9" >
+				<ee:transform doc:name="Transform Message" doc:id="15b0f603-0dd2-4830-84a1-2206bb64a4c3" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": error.detailedDescription
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="be531e6e-3317-457a-8e9f-09089aec34a2" />
+			</on-error-continue>
+		</error-handler>
+	</flow>
+	<flow name="fetchaccountinfo" doc:id="d8e08c32-9a43-4886-880d-e071b1a6f67b" >
+		<db:select doc:name="Fetch Account Details" doc:id="43c736ba-d63f-4d22-8b2b-6b2d2ca531a2" config-ref="Database_Config">
+			<db:sql >select 
+ad.AccountId, 
+ad.AccountType, 
+ad.Status, 
+ad.AccountDescriptorId, 
+a.AccountMasterId,
+ CASE 
+	when da.AvailableBalance is not null then da.AvailableBalance
+    when ia.CurrentValue is not null then ia.CurrentValue
+    when la.PrincipalBalance is not null then la.PrincipalBalance 
+	when loa.PrincipalBalance is not null then loa.PrincipalBalance
+ END as Balance
+FROM  accountdescriptor ad
+inner join account a 
+on ad.AccountDescriptorId = a.AccDescriptorId 
+left join depositaccount da
+on a.AccountMasterId = da.RefAccountId
+left join investmentaccount ia
+on a.AccountMasterId = ia.RefIAccountId
+left join loanaccount la
+on a.AccountMasterId = la.AccountId
+left join locaccount loa
+on a.AccountMasterId = loa.AccountId
+Where
+ad.AccountId = :AccountId;
+</db:sql>
+			<db:input-parameters ><![CDATA[#[{
+	'AccountId': vars.reqpayload.ToAccountId
+}]]]></db:input-parameters>
+		</db:select>
+	</flow>
+	<flow name="prechecksuccess" doc:id="b2b456ee-d86d-4ec9-ab4f-74db1be40e8b" >
+		<choice doc:name="Choice" doc:id="3aa88545-720b-485e-a727-e47fae1be07c" >
+			<when expression="#[vars.checkaccountstatus.status &gt; 0 and vars.checkaccountstatus.balancestatus &gt; 0]">
+				<try doc:name="Try" doc:id="4793f2e7-278d-4a43-8653-fe38a90c4e9a" >
+					<db:update doc:name="Debit Transfer Amount From Source Account" doc:id="9d87a8ea-70fe-403f-94a1-228411fb7b67" config-ref="Database_Config">
+					<db:sql>UPDATE depositaccount SET BalanceAsOf = now( ), AvailableBalance = AvailableBalance - :RequestAmount 
+WHERE DepositAccountId = :DepositAccountId;</db:sql>
+					<db:input-parameters><![CDATA[#[{
+	'DepositAccountId': vars.reqpayload.TransferId as String,
+	'RequestAmount': vars.reqpayload.Amount as Number
+}]]]></db:input-parameters>
+				</db:update>
+					<flow-ref doc:name="Credit To Recepient Account" doc:id="a7b8655a-1cfc-4864-b9b2-c63c791b215f" name="updatetoaccount" />
+					<flow-ref doc:name="Insert To Transfer Tables" doc:id="24858ddb-464b-4c18-aef0-263c2d10157d" name="insert_to_transfer_tables"/>
+					<db:select doc:name="Fetch Status From Transfer Status Table" doc:id="51f1aa4f-021d-4606-a5ac-763dad37a30c" config-ref="Database_Config">
+						<db:sql >SELECT * FROM transferstatus WHERE TransferId = :TransferId;</db:sql>
+						<db:input-parameters ><![CDATA[#[{
+	'TransferId': vars.reqpayload.TransferId
+}]]]></db:input-parameters>
+					</db:select>
+					<ee:transform doc:name="Transaction Status As Response" doc:id="3c379992-eb93-4780-b83f-5da178a74037" >
+						<ee:message >
+							<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+payload]]></ee:set-payload>
+						</ee:message>
+					</ee:transform>
+					<logger level="INFO" doc:name="Logger" doc:id="654f9d15-4d6e-4f6d-b8d5-cdd3fda27698" message="#[payload]"/>
+					<error-handler >
+						<on-error-propagate enableNotifications="true" logException="true" doc:name="On Error Propagate" doc:id="af8039a5-0f80-4a55-b9df-e82650e9aa3f" type="ANY">
+							<logger level="INFO" doc:name="Logger" doc:id="eb4577e3-e877-446c-bad6-d3c916d7a903" />
+						</on-error-propagate>
+						<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="f2aa54fd-727b-44ad-ab73-6bc51e5e12f7" type="DB:BAD_SQL_SYNTAX">
+							<ee:transform doc:name="Transform Message" doc:id="3fadd111-44e8-4679-8a03-3647313e98e6" >
+								<ee:message >
+									<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "Bad SQL syntax. " ++ error.description as String
+}]]></ee:set-payload>
+								</ee:message>
+							</ee:transform>
+							<set-variable value="500" doc:name="httpstatus" doc:id="8c813cd0-51f9-401b-8e47-3c8f78c00fa5" variableName="httpstatus"/>
+						</on-error-continue>
+						<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="de1c98bb-61ac-4188-a86e-0306b735c18e" type="DB:CONNECTIVITY">
+							<ee:transform doc:name="Transform Message" doc:id="fadb0d92-32fd-40c6-84a4-296b3e666984" >
+								<ee:message >
+									<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "Unable to connect to the database : " ++ error.description as String
+}]]></ee:set-payload>
+								</ee:message>
+							</ee:transform>
+							<set-variable value="500" doc:name="httpstatus" doc:id="7cbbdbba-d371-4ec4-833d-37b42741c123" variableName="httpstatus"/>
+						</on-error-continue>
+						<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="e9c42cd3-1138-4c1c-a5e5-2b01e4fb58c6" >
+							<ee:transform doc:name="Transform Message" doc:id="60660f8a-2080-4c4a-9d85-07ec18426f3d" >
+								<ee:message >
+									<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "First Choice Subflow: On Error Continue - Any : " ++ error.description as String
+}]]></ee:set-payload>
+								</ee:message>
+							</ee:transform>
+							<set-variable value="500" doc:name="httpstatus" doc:id="b1ce9ce8-171c-4b98-a439-0f912da20acf" variableName="httpstatus"/>
+						</on-error-continue>
+					</error-handler>
+				</try>
+			</when>
+			<when expression="#[vars.checkaccountstatus.status &lt;= 0]">
+				<ee:transform doc:name="Source Account Not In OPEN Status" doc:id="4aacb8c2-9de2-4b52-823c-752996995001" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "Source account is not in OPEN state. Current status - " ++ vars.checkaccountstatus.accountstatus[0] as String
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<set-variable value="400" doc:name="httpstatus" doc:id="19ab6a25-a9eb-4124-a945-743de229f91f" variableName="httpstatus"/>
+			</when>
+			<when expression="#[vars.checkaccountstatus.balancestatus &lt;= 0]">
+				<ee:transform doc:name="Source Account Does Not Have Enough Funds To Transfer" doc:id="b1de2e7d-d38c-4a7d-8808-1d4771982080" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "Source account does not have enough funds to transfer " ++ vars.checkaccountstatus.accountbalance[0] as String
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<set-variable value="400" doc:name="httpstatus" doc:id="471aad05-e621-4534-8c28-09a438f4234b" variableName="httpstatus"/>
+			</when>
+			<otherwise>
+				<ee:transform doc:name="Transform Message" doc:id="978de5d8-8f6c-4363-9950-66e294d72c01" >
+					<ee:message >
+						<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": "Choice Default"
+}]]></ee:set-payload>
+					</ee:message>
+				</ee:transform>
+				<logger level="INFO" doc:name="Logger" doc:id="33c5b12f-b1d1-4511-b2df-80bfcadb7676" />
+			
+</otherwise>
+						
+		</choice></flow>
+	<flow name="updatetoaccount" doc:id="521cabaf-f58a-45f6-af44-4ee399e74fce" >
+							<choice doc:name="Choice" doc:id="431f15dd-88db-49ad-9b75-656d37f49034" >
+						<when expression='#[vars.ToAccountId.accounttype[0] == "LOAN"]'>
+							<db:update doc:name="Credit Transfer Amount To Loan Account" doc:id="1bf68560-b2e4-489e-9ca7-4636859db4cb" config-ref="Database_Config">
+						<db:sql>UPDATE loanaccount SET BalanceAsOf = :SystemDate, LastPaymentAmount = :RequestAmount,
+PrincipalBalance = PrincipalBalance +:RequestAmount, TotalNumberOfPayments=TotalNumberOfPayments+1,
+LastPaymentAmount=:RequestAmount, LastPaymentDate = :SystemDate
+WHERE AccountId = :AccountMasterId;</db:sql>
+						<db:input-parameters><![CDATA[#[{
+	'SystemDate': now(),
+	'AccountMasterId': vars.ToAccountId.accountid[0] as String,
+	'RequestAmount': vars.reqpayload.Amount as Number
+}]]]></db:input-parameters>
+					</db:update>
+						</when>
+						<when expression='#[vars.ToAccountId.accounttype[0] == "401K"]'>
+				<db:update doc:name="Credit Transfer Amount to Investment Account" doc:id="38c57cca-436d-44ca-9a45-1aac7595ddb7" config-ref="Database_Config">
+					<db:sql >UPDATE investmentaccount SET BalanceAsOf = :SystemDate, CurrentValue = CurrentValue + :RequestAmount
+WHERE RefIAccountId = :AccountMasterId;
+</db:sql>
+					<db:input-parameters ><![CDATA[#[{
+	'SystemDate': now(),
+	'AccountMasterId': vars.ToAccountId.accountid[0] as String,
+	'RequestAmount': vars.reqpayload.Amount as Number
+}]]]></db:input-parameters>
+				</db:update>
+			</when>
+			<otherwise >
+							<logger level="INFO" doc:name="Logger" doc:id="a2d22eb7-8065-4e26-b6dc-55ae0d37b5dd" />
+						</otherwise>
+					</choice>
+	</flow>
+	<flow name="insert_to_transfer_tables" doc:id="1752711c-048d-4bde-a5ff-18c0e39efc24" >
+							<db:insert doc:name="Insert Transaction To Transfer Table" doc:id="d7499cf7-14ae-43bc-b424-48eb8a650be7" config-ref="Database_Config">
+			<db:sql>INSERT INTO transfer(TransferId,FromAccountId,ToAccountId,Amount,Memo) 
+VALUES(:TransferId,:FromAccountId,:ToAccountId,:Amount,:Memo);</db:sql>
+			<db:input-parameters><![CDATA[#[{
+	'TransferId': vars.reqpayload.TransferId as String,
+	'FromAccountId': vars.reqpayload.FromAccountId as String,
+	'ToAccountId': vars.reqpayload.ToAccountId as String,
+	'Amount': vars.reqpayload.Amount as Number,
+	'Memo': vars.reqpayload.Memo as String
+}]]]></db:input-parameters>
+		</db:insert>
+					<db:insert doc:name="Insert Transaction Status to Transfer Status Table" doc:id="3487a8e1-3874-4263-99f9-944296444b71" config-ref="Database_Config">
+						<db:sql >INSERT INTO transferstatus(TransferId, ReferenceId, Status, TransferDate)
+VALUES(:TransferId,:ReferenceId,:Status,:TransferDate);</db:sql>
+						<db:input-parameters ><![CDATA[#[{
+	'TransferId': vars.reqpayload.TransferId as String,
+	'ReferenceId': now() as String {format: "yyyyMMddhhmmss"},
+	'Status': "SUCESS",
+	'TransferDate': now() as DateTime { class : "java.sql.Date"}
+}]]]></db:input-parameters>
+					</db:insert>
+
+	</flow>
+	<flow name="receiveJMSMessages" doc:id="8392319e-0da0-4a86-9ae5-b695e2a12b2b" >
+		<jms:listener doc:name="JMS transfer Q" doc:id="61ece726-eeb6-476c-8047-2d4b528d7866" config-ref="JMS_Config" destination="accountsQ">
+			<jms:consumer-type >
+				<jms:queue-consumer />
+			</jms:consumer-type>
+		</jms:listener>
+		<file:write doc:name="Write Payload To File" doc:id="25bc6551-741a-4623-b34b-4f34c5edede3" config-ref="File_Config" path="C:\Pradeep\MuleTrainings\MuleProjects\Output.json"/>
+		<logger level="INFO" doc:name="payload" doc:id="8e9acd03-d1fa-4700-8a61-3be474b4b9bb" message="#[payload]"/>
+	</flow>
+</mule>

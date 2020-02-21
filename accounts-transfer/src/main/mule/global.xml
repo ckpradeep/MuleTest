@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:file="http://www.mulesoft.org/schema/mule/file"
+	xmlns:jms="http://www.mulesoft.org/schema/mule/jms"
+	xmlns:http="http://www.mulesoft.org/schema/mule/http" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/http http://www.mulesoft.org/schema/mule/http/current/mule-http.xsd 
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/jms http://www.mulesoft.org/schema/mule/jms/current/mule-jms.xsd
+http://www.mulesoft.org/schema/mule/file http://www.mulesoft.org/schema/mule/file/current/mule-file.xsd">
+    <http:listener-config name="HTTPListenerConfig">
+        <http:listener-connection host="0.0.0.0" port="8081" />
+    </http:listener-config>
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="407dcad6-2415-4471-8c95-3de5f95b5da3" >
+		<db:my-sql-connection host="localhost" port="3306" user="root" password="Oneseven@77" database="ddadb" />
+	</db:config>
+	<jms:config name="JMS_Config" doc:name="JMS Config" doc:id="f288d5e0-b04e-4828-b832-6e1fcb56257e" >
+		<jms:active-mq-connection >
+			<jms:factory-configuration />
+		</jms:active-mq-connection>
+	</jms:config>
+	<file:config name="File_Config" doc:name="File Config" doc:id="9f0cd093-8b72-4dba-a61a-9d97322febba" >
+		<file:connection workingDir="C:/Pradeep/MuleTrainings/MuleProjects" />
+	</file:config>
+	<error-handler name="globalError_Handler" doc:id="9f9dc3db-4b5c-4b28-9e48-b7c079b40a0a" >
+		<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="ed18e121-2ff6-43a6-8ce3-71cc32b69fd6" type="ANY">
+			<ee:transform doc:name="Transform Message" doc:id="dea8dfed-6777-48c6-80b1-a168bc83aaa8" >
+				<ee:message >
+					<ee:set-payload ><![CDATA[%dw 2.0
+output application/json
+---
+{
+	"message": error.description
+}]]></ee:set-payload>
+				</ee:message>
+			</ee:transform>
+		</on-error-continue>
+	</error-handler>
+
+</mule>	
